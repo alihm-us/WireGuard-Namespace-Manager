@@ -27,7 +27,7 @@ wget https://raw.githubusercontent.com/yourusername/wireguard-namespace-manager/
 chmod +x setup-wg.sh
 ```
 
-2. Run the script:
+2. Make the script executable and run it:
 ```bash
 sudo ./setup-wg.sh
 ```
@@ -39,43 +39,73 @@ sudo ./setup-wg.sh
 1. Run the script: `sudo ./setup-wg.sh`
 2. Select option `1` (Create New Setup)
 3. Enter the path to your WireGuard config file
-4. Enter the port number you want to use
-5. **In your V2Ray/Xray panel**, first create an **inbound** with your desired settings (UUID, transport, headers, etc.), then copy its **VLESS URI** (for example: `vless://...`).
-6. When the script asks for the VLESS URI, paste the URI from your panel so the inbound inside the namespace matches the panel config exactly.
+4. Enter the port number you want to use (this will be the public VLESS port)
+5. **In your V2Ray/Xray panel**, first create an **inbound** for this server with your desired settings (UUID, transport, headers, etc.), then copy its **VLESS URI** (for example: `vless://...`).
+6. When the script finishes the WireGuard setup, it will ask for a **VLESS URI**. Paste the URI from your panel so the inbound inside the namespace matches the panel config exactly.
 7. The script will automatically:
    - Create an isolated network namespace
-   - Set up WireGuard tunnel
+   - Set up the WireGuard tunnel
    - Configure routing and NAT
-   - Start an Xray proxy inside the namespace using the imported VLESS config
-   - Display the connection string
+   - Start an Xray proxy inside the namespace using the imported VLESS config (or a simple default one if you skip the URI)
+   - Display a ready-to-use connection string
 
 ### Managing Xray
 
-Select option `2` to manage Xray instances:
-- Start/Restart Xray with custom UUID and settings
-- Stop Xray
-- View logs
+Select option `2` to manage Xray instances for an existing port:
+
+- **Start/Restart Xray**
+  - Enter the port number (for example `49021`)
+  - Optionally paste a full VLESS URI to import:
+    - If you paste a URI, the script parses:
+      - UUID
+      - `type` (must be `tcp`)
+      - `security` (e.g. `none`)
+      - `headerType=http`, `host`, `path` (if present)
+    - And generates an inbound that matches your panel config.
+  - If you skip the URI, it will ask for:
+    - UUID (with a default value)
+    - Optional HTTP header (Host + Path)
+- **Stop Xray**
+- **View logs** (`/tmp/xray-{PORT}.log`)
+
+### Restarting WireGuard
+
+Select option `3` to restart the WireGuard tunnel for a given port:
+
+- Brings the WireGuard interface **down** and then **up** inside the namespace
+- Re-applies minimal routing (default route via WireGuard + endpoint route)
+- Waits for a new handshake and shows the latest handshake time
 
 ### Deleting a Setup
 
-Select option `3` to delete a setup:
-- Removes namespace
-- Cleans up iptables rules
-- Removes veth interfaces
+Select option `4` to delete a setup:
+- Deletes the namespace
+- Deletes the veth pair
+- Cleans up all related `iptables` rules (DNAT/FORWARD/LOG)
 
 ### Debugging
 
-Select option `4` to debug a setup:
+Select option `5` to debug a setup:
 - Collects comprehensive debug information
 - Saves to `/tmp/debug-{PORT}.log`
 - Optional real-time packet logging
 
 
-## Connection String Format
+## Connection String Formats
 
-```
-vless://{UUID}@{SERVER_IP}:{PORT}?encryption=none&type=tcp&headerType=http&host={HOST}&path={PATH}&security=none
-```
+Depending on your inbound configuration, the script can generate two main VLESS forms:
+
+- **Simple TCP VLESS (no HTTP header)**:
+
+  ```text
+  vless://{UUID}@{SERVER_IP}:{PORT}?type=tcp&encryption=none&security=none
+  ```
+
+- **TCP VLESS with HTTP header (obfuscation)**:
+
+  ```text
+  vless://{UUID}@{SERVER_IP}:{PORT}?encryption=none&type=tcp&headerType=http&host={HOST}&path={PATH}&security=none
+  ```
 
 ## Network Architecture
 
@@ -85,6 +115,7 @@ Each setup creates:
 - A WireGuard interface inside the namespace
 - Xray proxy listening on the specified port
 - iptables rules for port forwarding and NAT
+- Per-namespace DNS configuration (`/etc/netns/ns-{NAME}/resolv.conf`)
 
 ## Troubleshooting
 
