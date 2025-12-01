@@ -40,11 +40,13 @@ sudo ./setup-wg.sh
 2. Select option `1` (Create New Setup)
 3. Enter the path to your WireGuard config file
 4. Enter the port number you want to use
-5. The script will automatically:
+5. **In your V2Ray/Xray panel**, first create an **inbound** with your desired settings (UUID, transport, headers, etc.), then copy its **VLESS URI** (for example: `vless://...`).
+6. When the script asks for the VLESS URI, paste the URI from your panel so the inbound inside the namespace matches the panel config exactly.
+7. The script will automatically:
    - Create an isolated network namespace
    - Set up WireGuard tunnel
    - Configure routing and NAT
-   - Start Xray proxy with default settings
+   - Start an Xray proxy inside the namespace using the imported VLESS config
    - Display the connection string
 
 ### Managing Xray
