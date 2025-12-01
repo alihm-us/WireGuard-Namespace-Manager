@@ -68,13 +68,6 @@ Select option `4` to debug a setup:
 - Saves to `/tmp/debug-{PORT}.log`
 - Optional real-time packet logging
 
-## Default Settings
-
-- **UUID**: `6331f5f6-5314-4e56-8ce1-db24d3a470ae` (can be changed)
-- **HTTP Host**: `iran.ir` (can be changed)
-- **HTTP Path**: `/` (can be changed)
-- **Protocol**: VLESS over TCP
-- **Encryption**: None (for obfuscation)
 
 ## Connection String Format
 
