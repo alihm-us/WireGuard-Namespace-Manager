@@ -167,6 +167,7 @@ function show_header() {
     echo -e "${BLUE}╔════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║        WireGuard Namespace Manager                 ║${NC}"
     echo -e "${BLUE}╚════════════════════════════════════════════════════╝${NC}"
+    echo -e "Repo: https://github.com/alihm-us/WireGuard-Namespace-Manager"
     echo ""
 }
 
