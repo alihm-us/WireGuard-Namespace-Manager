@@ -26,6 +26,7 @@
 # Author: Auto-generated
 # License: MIT
 # Version: 1.0.0
+# Repository: https://github.com/alihm-us/WireGuard-Namespace-Manager
 ###############################################################################
 
 # Don't exit on error for cleanup operations (we handle errors manually)
