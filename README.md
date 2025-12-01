@@ -23,7 +23,7 @@ A powerful bash script to manage multiple isolated WireGuard tunnels and Xray pr
 
 1. Clone or download the script:
 ```bash
-wget https://raw.githubusercontent.com/yourusername/wireguard-namespace-manager/main/setup-wg.sh
+wget https://raw.githubusercontent.com/alihm-us/wireguard-namespace-manager/main/setup-wg.sh
 chmod +x setup-wg.sh
 ```
 
