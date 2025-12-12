@@ -1,159 +1,300 @@
-# WireGuard Namespace Manager
+# WireGuard Namespace Manager (WGNM)
 
-A powerful Python tool for managing multiple isolated WireGuard tunnels and Xray proxy instances using Linux network namespaces. Each tunnel runs in its own namespace with automatic Xray setup, UUID management, and auto-restore capabilities.
+[![Python](https://img.shields.io/badge/Python-3.6+-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Features
+A powerful tool for managing multiple isolated WireGuard tunnels and Xray proxy instances using Linux Network Namespaces. Each tunnel runs in its own namespace with automatic Xray configuration.
 
-- **Multiple Isolated Tunnels**: Create and manage multiple WireGuard tunnels, each running in its own Linux network namespace
-- **Automatic Xray Integration**: Automatically configure and manage Xray proxy instances for each tunnel
-- **Panel Integration**: Supports x-ui and Marzban panels with automatic UUID extraction from database
-- **Auto UUID Refresh**: Background watcher automatically updates UUIDs from panel database every 5 seconds (configurable)
-- **Auto-Restore After Reboot**: Automatically restores all tunnels after server reboot via systemd service
-- **Smart Resource Management**: Only restarts Xray when UUIDs actually change, preventing unnecessary resource usage
-- **Interactive Setup Wizard**: First-time setup wizard for easy configuration
-- **Comprehensive Status Display**: Real-time status of tunnels, Xray processes, and UUID counts
-- **Debug Tools**: Built-in debugging and troubleshooting tools
+## ✨ Features
 
-## Requirements
+- 🔒 **Complete Isolation**: Each WireGuard tunnel runs in its own network namespace
+- 🚀 **Xray Support**: Automatic Xray setup for each namespace
+- 🔄 **Auto UUID Refresh**: UUIDs are automatically read from panel (Marzban/x-ui) and updated
+- 📊 **Easy Management**: Simple and intuitive interactive menu
+- 🔧 **Auto-Restore**: Automatic tunnel restoration after system reboot
+- ⚡ **Background Service**: Runs as a systemd service in the background
+- 🎯 **Multi-Panel Support**: Supports both Marzban and x-ui panels
+- 🔐 **Secure**: Uses proper command execution with security best practices
 
-- Linux system with root access
-- Python 3.6+
+## 📋 Requirements
+
+- Linux (tested on Ubuntu/Debian)
+- Python 3.6 or higher
+- Root access
 - WireGuard kernel module
-- Required packages: `wireguard-tools`, `iproute2`, `iptables`, `curl`
-- Xray binary (automatically downloaded if not present)
+- Network tools: `iproute2`, `iptables`
 
-## Installation
+## 🚀 Installation
 
-1. Clone the repository:
+### 1. Clone the Repository
+
 ```bash
 git clone https://github.com/alihm-us/WireGuard-Namespace-Manager.git
 cd WireGuard-Namespace-Manager
 ```
 
-2. Make the script executable:
-```bash
-chmod +x WGNM.py
-```
+### 2. Install Dependencies
 
-3. Run the script (it will check and install dependencies automatically):
+The script automatically checks and installs required dependencies:
+
 ```bash
 sudo python3 WGNM.py
 ```
 
-## First-Time Setup
+On first run, the script will check for the following dependencies:
+- `wireguard-tools`
+- `iproute2`
+- `iptables`
+- `curl`
+- WireGuard kernel module
 
-On first run, the script will launch an interactive setup wizard that guides you through:
+### 3. Create Shortcut (Optional)
 
-1. **Panel Selection**: Choose your panel (x-ui, Marzban, or None)
-2. **Database Path**: Configure the path to your panel's database file
-3. **UUID Refresh Interval**: Set how often to check for new UUIDs (default: 5 seconds)
-4. **Auto-Restore**: Enable automatic tunnel restoration after reboot
+For easier access, you can create a symlink:
 
-The configuration is saved to `/root/.config/wgnm/config.json` and can be modified later.
+```bash
+sudo ln -s /path/to/WGNM.py /usr/local/bin/WGNM
+sudo chmod +x /usr/local/bin/WGNM
+```
 
-## Usage
+Now you can run the script from anywhere by typing `WGNM`.
+
+## 📖 Usage
+
+### Running the Script
+
+```bash
+sudo WGNM
+```
+
+Or:
+
+```bash
+sudo python3 WGNM.py
+```
 
 ### Main Menu
 
-When you run the script, you'll see the main menu with the following options:
+After running, you'll see the following menu:
 
-1. **Create New Setup**: Create a new WireGuard tunnel with Xray proxy
-2. **Manage Xray**: Start, stop, or restart Xray processes for tunnels
-3. **Restart WireGuard**: Restart WireGuard interfaces
-4. **Delete Setup**: Remove a tunnel and its namespace
-5. **Debug Setup**: Debug and troubleshoot tunnel issues
-6. **Restore All Tunnels**: Manually restore all tunnels (useful after reboot)
-7. **Restore Tunnel from Config File**: Restore a tunnel from a WireGuard config file
-8. **Setup Auto-Restore**: Configure systemd service for automatic restoration
-9. **Exit**: Exit the script
+```
+╔════════════════════════════════════════════════════╗
+║        WireGuard Namespace Manager                 ║
+╚════════════════════════════════════════════════════╝
 
-### Command-Line Options
-
-The script supports several command-line options:
-
-```bash
-# Run in interactive mode (default)
-sudo python3 WGNM.py
-
-# Run in auto-refresh mode (background, no menu)
-sudo python3 WGNM.py --auto-refresh
-# or
-sudo python3 WGNM.py --watch
-
-# Restore all tunnels (used by systemd service)
-sudo python3 WGNM.py --restore
+1. Create New Setup
+2. Manage Xray
+3. Restart WireGuard
+4. Delete Setup
+5. Debug Setup
+6. Restore All Tunnels
+7. Restore Tunnel from Config File
+8. Setup Auto-Restore
+9. Exit
 ```
 
-### Creating a Tunnel
+### Setup Wizard
+
+On first run, a setup wizard will guide you through:
+
+1. **Panel Selection**: Choose between x-ui or Marzban
+2. **Database Path**: Path to your panel's database file
+3. **UUID Refresh Interval**: How often to check for UUID updates (default: 5 seconds)
+4. **Auto-Restore**: Enable automatic tunnel restoration after reboot
+
+### Creating a New Tunnel
 
 1. Select option `1` from the main menu
-2. Enter the port number for the tunnel (e.g., `30695`)
-3. Provide the WireGuard configuration file path or paste the config
-4. The script will:
-   - Create a network namespace (`ns-<port>`)
-   - Set up WireGuard interface in the namespace
-   - Configure routing and iptables rules
-   - Extract UUIDs from your panel database
-   - Create and start Xray configuration with all UUIDs
+2. Enter the path to your WireGuard config file
+3. Enter the port number
+4. The script will automatically:
+   - Create a namespace
+   - Configure WireGuard
+   - Start Xray
+   - Load UUIDs from the panel
 
 ### Managing Xray
 
-Use option `2` from the main menu to:
-- Start Xray for a specific tunnel
-- Stop Xray for a specific tunnel
-- Restart Xray for a specific tunnel
-- View Xray status and logs
+Option `2` from the main menu allows you to:
+- View Xray status in all namespaces
+- Start/Stop Xray
+- Manually refresh UUIDs
 
-### Auto UUID Refresh
+### Auto-Restore
 
-The script includes a background watcher that:
-- Automatically reads UUIDs from your panel database every 5 seconds (configurable)
-- Only restarts Xray when UUIDs actually change (smart detection)
-- Ensures new users can connect immediately without manual intervention
-- Works in the background without blocking the main menu
+Option `8` from the main menu:
+- Creates a systemd service for automatic tunnel restoration after reboot
 
-The watcher is automatically started when you run the script and continues running in the background.
+## 🔧 Advanced Commands
 
-### Auto-Restore After Reboot
+### Run Auto-Refresh
 
-The script can automatically restore all tunnels after a server reboot:
-
-1. Enable auto-restore during setup wizard, or
-2. Use option `8` from the main menu to set up the systemd service
-
-The systemd service (`setup-wg-restore.service`) will:
-- Automatically restore all tunnels on boot
-- Start the UUID watcher
-- Ensure all services are running correctly
-
-To manually test the restore:
 ```bash
-sudo systemctl start setup-wg-restore
+sudo WGNM --auto-refresh
 ```
 
-To disable auto-restore:
+Or:
+
 ```bash
-sudo systemctl disable setup-wg-restore
+sudo WGNM --watch
 ```
 
-## Panel Integration
+This runs the script in background mode and automatically refreshes UUIDs.
 
-### Supported Panels
+### Restore Tunnels
 
-- **x-ui**: Default database path: `/etc/x-ui/x-ui.db`
-- **Marzban**: Default database path: `/var/lib/marzban/db.sqlite3`
+```bash
+sudo WGNM --restore
+```
 
-### UUID Extraction
+Restores all saved tunnels (typically used by systemd service).
 
-The script automatically extracts UUIDs from your panel's database:
-- For **x-ui**: Reads from the `inbounds` table
-- For **Marzban**: Reads from the `users` table and `proxies.settings` JSON field
+### Start Watcher
 
-UUIDs are automatically updated every 5 seconds (configurable) to ensure new users can connect immediately.
+```bash
+sudo WGNM --start-watcher
+```
 
-## Configuration
+Starts the UUID watcher in the background.
 
-Configuration is stored in `/root/.config/wgnm/config.json`:
+## 📁 File Structure
+
+```
+/root/WGNM.py                    # Main script
+/etc/setup-wg/
+  ├── config.json                # Main configuration
+  └── tunnels/                   # Tunnel information
+/tmp/
+  ├── setup-wg-watch.log         # Watcher logs
+  ├── setup-wg-uuids/            # UUID files
+  └── xray-*.json                # Xray configs
+/etc/systemd/system/
+  ├── setup-wg-restore.service    # Auto-restore service
+  └── setup-wg-uuid-watcher.service  # UUID watcher service
+```
+
+## 🔍 How It Works
+
+### Network Namespaces
+
+Each WireGuard tunnel runs in its own Linux network namespace (`ns-{port}`), providing complete network isolation. This allows multiple tunnels to run simultaneously without conflicts.
+
+### UUID Management
+
+The script automatically:
+1. Reads UUIDs from your panel database (Marzban or x-ui)
+2. Detects changes by comparing hashes
+3. Updates Xray configurations when UUIDs change
+4. Restarts Xray services to apply changes
+
+### Background Services
+
+Two systemd services are available:
+
+1. **setup-wg-restore.service**: Restores all tunnels after system reboot
+2. **setup-wg-uuid-watcher.service**: Continuously monitors and updates UUIDs
+
+## 🔍 Troubleshooting
+
+### Tunnels Not Showing in List
+
+If tunnels are not displayed in the list:
+
+1. Check if namespaces exist:
+   ```bash
+   ip netns list
+   ```
+
+2. Check logs:
+   ```bash
+   tail -f /tmp/setup-wg-watch.log
+   ```
+
+### UUIDs Not Updating
+
+1. Check service status:
+   ```bash
+   systemctl status setup-wg-uuid-watcher.service
+   ```
+
+2. Check logs:
+   ```bash
+   tail -f /tmp/setup-wg-watch.log
+   ```
+
+3. Verify database path in config:
+   ```bash
+   cat /etc/setup-wg/config.json
+   ```
+
+### Command Execution Errors
+
+If commands fail:
+
+1. Verify root access:
+   ```bash
+   sudo -v
+   ```
+
+2. Check dependencies:
+   ```bash
+   which wg ip iptables curl
+   ```
+
+### Service Not Starting
+
+If the UUID watcher service fails to start:
+
+1. Check service logs:
+   ```bash
+   journalctl -u setup-wg-uuid-watcher.service -n 50
+   ```
+
+2. Verify Python path:
+   ```bash
+   which python3
+   ```
+
+3. Check script permissions:
+   ```bash
+   ls -la /root/WGNM.py
+   ```
+
+## 🛠️ Development
+
+### Code Structure
+
+- `run_cmd()`: Execute shell commands securely
+- `create_setup()`: Create new tunnel
+- `manage_xray()`: Manage Xray instances
+- `refresh_uuids_for_all_namespaces()`: Update UUIDs
+- `extract_uuids_from_sqlite()`: Extract UUIDs from database
+- `ensure_uuid_watcher_service()`: Setup systemd service
+
+### Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+### Code Style
+
+- Follow PEP 8 style guide
+- Use type hints where possible
+- Add docstrings to functions
+- Write clear commit messages
+
+## 📝 Configuration
+
+### Config File Location
+
+`/etc/setup-wg/config.json`
+
+### Example Config
 
 ```json
 {
@@ -165,105 +306,67 @@ Configuration is stored in `/root/.config/wgnm/config.json`:
 }
 ```
 
-You can edit this file directly or use the setup wizard to reconfigure.
+## 🔐 Security Considerations
 
-## File Structure
+- The script requires root access to manage network namespaces
+- Database files are read in read-only mode
+- Commands are executed with proper quoting to prevent injection
+- Systemd services run as root (required for network operations)
 
-- **Main Script**: `WGNM.py`
-- **Config File**: `/root/.config/wgnm/config.json`
-- **UUID Files**: `/tmp/setup-wg-uuids/uuids-<port>.txt`
-- **Xray Configs**: `/tmp/xray-<port>.json`
-- **Xray Logs**: `/tmp/xray-<port>.log`
-- **Debug Log**: `/tmp/setup-wg-watch.log`
-- **State Files**: `/tmp/setup-wg-*.state`
+## 📊 Performance
 
-## Troubleshooting
+- UUID refresh interval is configurable (default: 5 seconds)
+- Changes are detected using hash comparison for efficiency
+- Only restarts Xray when UUIDs actually change
+- Background services use minimal resources
 
-### Tunnel Not Connecting
+## 🧪 Testing
 
-1. Use option `5` (Debug Setup) to check tunnel status
-2. Verify WireGuard interface is up: `ip netns exec ns-<port> wg show`
-3. Check Xray logs: `tail -f /tmp/xray-<port>.log`
-4. Verify UUIDs are loaded: Check `/tmp/setup-wg-uuids/uuids-<port>.txt`
+To test the script:
 
-### Xray Not Starting
+1. Create a test WireGuard config
+2. Run the setup wizard
+3. Create a tunnel
+4. Verify namespace creation:
+   ```bash
+   ip netns list
+   ```
+5. Check Xray status in the menu
 
-1. Check if Xray binary exists: `ls -la /usr/local/bin/xray-ns`
-2. Check Xray logs: `tail -f /tmp/xray-<port>.log`
-3. Verify UUIDs are present in the config: `cat /tmp/xray-<port>.json`
-4. Check namespace: `ip netns exec ns-<port> ss -tlnp | grep <port>`
+## 📚 Documentation
 
-### UUIDs Not Updating
+- [WireGuard Documentation](https://www.wireguard.com/)
+- [Xray Documentation](https://xtls.github.io/)
+- [Linux Network Namespaces](https://man7.org/linux/man-pages/man7/namespaces.7.html)
 
-1. Verify panel database path is correct in config
-2. Check database file permissions
-3. View debug log: `tail -f /tmp/setup-wg-watch.log`
-4. Manually trigger refresh: Restart the script or use option `2` to restart Xray
+## 📝 License
 
-### Tunnels Not Restoring After Reboot
+This project is licensed under the MIT License - see the `LICENSE` file for details.
 
-1. Check systemd service status: `systemctl status setup-wg-restore`
-2. Check service logs: `journalctl -u setup-wg-restore -n 50`
-3. Verify service is enabled: `systemctl is-enabled setup-wg-restore`
-4. Manually restore: Use option `6` from the main menu
+## 🙏 Acknowledgments
 
-## Advanced Usage
+- [WireGuard](https://www.wireguard.com/) - VPN protocol
+- [Xray](https://github.com/XTLS/Xray-core) - Proxy tool
+- [Marzban](https://github.com/Gozargah/Marzban) - Management panel
+- [x-ui](https://github.com/vaxilu/x-ui) - Management panel
 
-### Running in Background
+## 📞 Support
 
-To run the UUID watcher in background mode:
+- **Issues**: [GitHub Issues](https://github.com/alihm-us/WireGuard-Namespace-Manager/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/alihm-us/WireGuard-Namespace-Manager/discussions)
 
-```bash
-sudo python3 WGNM.py --auto-refresh &
-```
+## ⚠️ Warning
 
-Or use the systemd service for persistent background operation.
+This tool requires root access and makes changes to system network configuration. Please test it in a safe environment before using in production.
 
-### Manual UUID Management
+## 🗺️ Roadmap
 
-UUIDs are stored in `/tmp/setup-wg-uuids/uuids-<port>.txt`, one per line. You can manually edit these files, but they will be overwritten by the auto-refresh watcher.
+- [ ] Support for more panel types
+- [ ] Web UI for management
+- [ ] Docker support
+- [ ] Better error handling and recovery
+- [ ] Performance optimizations
 
-### Custom Xray Configuration
+---
 
-Xray configurations are generated automatically but stored in `/tmp/xray-<port>.json`. You can modify these files, but they will be regenerated when UUIDs are refreshed.
-
-## Technical Details
-
-### Network Namespaces
-
-Each tunnel runs in its own Linux network namespace (`ns-<port>`), providing complete isolation:
-- Separate network interfaces
-- Independent routing tables
-- Isolated iptables rules
-- Independent Xray processes
-
-### UUID Detection
-
-The script uses multiple methods to detect UUID changes:
-- MD5 hash comparison of UUID lists
-- Database file modification time tracking
-- Smart restart only when changes are detected
-
-### Resource Optimization
-
-- Xray is only restarted when UUIDs actually change
-- UUID hash and database mtime are persisted across restarts
-- Background watcher uses minimal resources
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is open source. Please refer to the repository for license details.
-
-## Support
-
-For issues, questions, or contributions, please visit:
-- GitHub Repository: https://github.com/alihm-us/WireGuard-Namespace-Manager
-- Issues: https://github.com/alihm-us/WireGuard-Namespace-Manager/issues
-
-## Acknowledgments
-
-This is a Python port of the original `setup-wg.sh` Bash script, with additional features and improvements.
+**Note**: This project is a Python port of the original Bash script `setup-wg.sh` and maintains feature parity with it.
