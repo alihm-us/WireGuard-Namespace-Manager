@@ -40,16 +40,37 @@ def run_cmd(
 ) -> subprocess.CompletedProcess:
     """Run a shell command, optionally inside a network namespace."""
     if ns:
-        full_cmd = f"ip netns exec {shlex.quote(ns)} {cmd}"
+        # For commands with pipes or complex shell operations, use shell=True
+        # but wrap in ip netns exec for security
+        if "|" in cmd or ">" in cmd or "<" in cmd or "&&" in cmd or ";" in cmd:
+            # Complex command with pipes - use shell but with proper quoting
+            full_cmd = f"ip netns exec {shlex.quote(ns)} sh -c {shlex.quote(cmd)}"
+            return subprocess.run(
+                full_cmd,
+                shell=True,
+                check=check,
+                capture_output=capture_output,
+                text=True,
+            )
+        else:
+            # Simple command - use list format for better security
+            cmd_parts = shlex.split(cmd)
+            full_cmd_list = ["ip", "netns", "exec", ns] + cmd_parts
+            return subprocess.run(
+                full_cmd_list,
+                check=check,
+                capture_output=capture_output,
+                text=True,
+            )
     else:
-        full_cmd = cmd
-    return subprocess.run(
-        full_cmd,
-        shell=True,
-        check=check,
-        capture_output=capture_output,
-        text=True,
-    )
+        # For commands without namespace, use shell for compatibility
+        return subprocess.run(
+            cmd,
+            shell=True,
+            check=check,
+            capture_output=capture_output,
+            text=True,
+        )
 
 
 def require_root() -> None:
@@ -525,6 +546,18 @@ WantedBy=multi-user.target
         PANEL_PANEL_NAME = config["panel_type"]
         PANEL_DB_PATH = config["panel_db_path"]
         save_panel_state()
+    
+    # Start UUID watcher in background if panel is configured
+    if config["panel_type"] and config["panel_db_path"]:
+        print(f"\n{BLUE}Starting UUID auto-refresh watcher...{NC}")
+        if start_background_uuid_watcher():
+            interval = config.get("uuid_refresh_interval", 5)
+            print(f"{GREEN}✓ UUID Auto-Refresh Watcher started (every {interval} seconds){NC}")
+            print(f"{BLUE}  UUIDs will be automatically updated from panel every {interval} seconds{NC}")
+            print(f"{BLUE}  New users will be able to connect automatically{NC}")
+        else:
+            print(f"{YELLOW}⚠ Could not start UUID watcher automatically{NC}")
+            print(f"{YELLOW}  You can start it manually from the menu{NC}")
     
     print(f"\n{GREEN}{'='*60}{NC}")
     print(f"{GREEN}  Setup completed successfully!{NC}")
@@ -1024,7 +1057,7 @@ def start_uuid_watcher(interval_seconds: int = 5) -> None:
     Start a background thread that refreshes UUIDs for all namespaces
     every `interval_seconds` seconds.
     
-    This watcher is always active and reads UUIDs from the panel every 5 seconds
+    This watcher is always active and reads UUIDs from the panel every interval_seconds
     and restarts Xray with the new list so new users can also connect.
     """
     global UUID_WATCHER_STARTED, UUID_WATCHER_LOCK
@@ -1037,14 +1070,14 @@ def start_uuid_watcher(interval_seconds: int = 5) -> None:
 
     def _loop() -> None:
         debug_log(f"UUID watcher started with interval={interval_seconds}s")
-        debug_log("Watcher will refresh UUIDs every 5 seconds to keep user list updated")
+        debug_log(f"Watcher will refresh UUIDs every {interval_seconds} seconds to keep user list updated")
         
         consecutive_errors = 0
         max_consecutive_errors = 10
         
         while True:
             try:
-                # Every 5 seconds, fetch UUIDs from panel and restart Xray
+                # Every interval_seconds, fetch UUIDs from panel and restart Xray
                 refresh_uuids_for_all_namespaces_noninteractive()
                 consecutive_errors = 0  # Reset error counter on success
             except KeyboardInterrupt:
@@ -1070,6 +1103,96 @@ def start_uuid_watcher(interval_seconds: int = 5) -> None:
     t = threading.Thread(target=_loop, daemon=True, name="UUID-Watcher")
     t.start()
     debug_log("UUID watcher thread started successfully")
+
+
+def ensure_uuid_watcher_service() -> bool:
+    """
+    Ensure UUID watcher systemd service is set up and running.
+    This creates a systemd service that runs the watcher independently
+    of the main script process.
+    
+    Returns True if service is running or was successfully started, False otherwise.
+    """
+    service_file = "/etc/systemd/system/setup-wg-uuid-watcher.service"
+    script_path = os.path.abspath(__file__)
+    
+    # Check if service file exists
+    if not os.path.isfile(service_file):
+        # Create service file
+        config = load_config()
+        interval = config.get("uuid_refresh_interval", 5)
+        
+        service_content = f"""[Unit]
+Description=WireGuard Namespace Manager - UUID Auto-Refresh Watcher
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 {script_path} --auto-refresh
+Restart=always
+RestartSec=10
+StandardOutput=append:/tmp/setup-wg-watch.log
+StandardError=append:/tmp/setup-wg-watch.log
+User=root
+
+[Install]
+WantedBy=multi-user.target
+"""
+        try:
+            with open(service_file, "w", encoding="utf-8") as f:
+                f.write(service_content)
+            debug_log(f"ensure_uuid_watcher_service: created service file at {service_file}")
+            
+            # Reload systemd
+            run_cmd("systemctl daemon-reload", capture_output=False)
+            debug_log("ensure_uuid_watcher_service: systemd daemon reloaded")
+            
+            # Enable service
+            run_cmd("systemctl enable setup-wg-uuid-watcher.service", capture_output=False)
+            debug_log("ensure_uuid_watcher_service: service enabled")
+        except Exception as e:
+            debug_log(f"ensure_uuid_watcher_service: failed to create service: {e!r}")
+            return False
+    
+    # Check if service is running
+    status_cmd = run_cmd("systemctl is-active setup-wg-uuid-watcher.service", capture_output=True)
+    if status_cmd.returncode == 0 and "active" in status_cmd.stdout.lower():
+        debug_log("ensure_uuid_watcher_service: service is already running")
+        return True
+    
+    # Try to start the service
+    try:
+        start_cmd = run_cmd("systemctl start setup-wg-uuid-watcher.service", capture_output=True)
+        if start_cmd.returncode == 0:
+            debug_log("ensure_uuid_watcher_service: service started successfully")
+            return True
+        else:
+            debug_log(f"ensure_uuid_watcher_service: failed to start service: {start_cmd.stderr}")
+            return False
+    except Exception as e:
+        debug_log(f"ensure_uuid_watcher_service: error starting service: {e!r}")
+        return False
+
+
+def start_background_uuid_watcher() -> bool:
+    """
+    Start UUID watcher in background. First tries to use systemd service,
+    if that fails, starts as a daemon thread in current process.
+    
+    Returns True if watcher was started successfully, False otherwise.
+    """
+    # First, try to ensure systemd service is running (preferred method)
+    if ensure_uuid_watcher_service():
+        debug_log("start_background_uuid_watcher: using systemd service")
+        return True
+    
+    # Fallback: start as thread in current process
+    debug_log("start_background_uuid_watcher: systemd service not available, using thread")
+    config = load_config()
+    interval = config.get("uuid_refresh_interval", 5)
+    start_uuid_watcher(interval_seconds=interval)
+    return True
 
 
 def start_marzban_log_watcher() -> None:
@@ -1099,9 +1222,12 @@ def start_marzban_log_watcher() -> None:
         while True:
             try:
                 # Follow logs; restart the loop if the command exits for any reason
-                cmd = "marzban logs 2>/dev/null"
+                # Use list format for better security
                 proc = subprocess.Popen(
-                    cmd, shell=True, text=True, stdout=subprocess.PIPE
+                    ["marzban", "logs"],
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
                 )
                 if not proc.stdout:
                     # Should not normally happen, but be defensive
@@ -1484,6 +1610,7 @@ def extract_uuids_from_sqlite(db_path: str) -> List[str]:
         ]
 
         # 1) Marzban-style: UUIDs in proxies.settings JSON field
+        proxies_found = False
         if "proxies" in tables:
             cols = [
                 r[1]
@@ -1501,23 +1628,32 @@ def extract_uuids_from_sqlite(db_path: str) -> List[str]:
                                 uuid_val = settings["id"]
                                 if isinstance(uuid_val, str) and uuid_val.strip():
                                     uuids.append(uuid_val.strip())
+                                    proxies_found = True
                         except (json.JSONDecodeError, TypeError, AttributeError) as e:
                             debug_log(f"sqlite_uuid_scan: error parsing proxy settings: {e!r}")
                             continue
-                debug_log(f"sqlite_uuid_scan: processed {proxy_count} VLESS proxy(ies)")
+                debug_log(f"sqlite_uuid_scan: processed {proxy_count} VLESS proxy(ies), found {len([u for u in uuids if u])} UUID(s) from proxies")
         
-        # 2) Fallback: users.uuid column (for older Marzban or x-ui)
-        if not uuids and "users" in tables:
+        # 2) Fallback: users.uuid column (for Marzban or x-ui)
+        # Always check users table - it's the primary source for Marzban
+        # This ensures we get all UUIDs even if proxies table is incomplete
+        if "users" in tables:
             cols = [
                 r[1]
                 for r in cur.execute('PRAGMA table_info("users")').fetchall()
             ]
             if "uuid" in cols:
+                users_count = 0
+                users_before = len(uuids)
                 for (val,) in cur.execute('SELECT uuid FROM "users"'):
+                    users_count += 1
                     if isinstance(val, str):
                         v = val.strip()
-                        if v:
+                        if v and v not in uuids:  # Avoid duplicates
                             uuids.append(v)
+                users_added = len(uuids) - users_before
+                debug_log(f"sqlite_uuid_scan: processed {users_count} user(s) from users table, added {users_added} new UUID(s)")
+                debug_log(f"sqlite_uuid_scan: processed {users_count} user(s) from users table")
 
         debug_log(f"sqlite_uuid_scan: extracted {len(uuids)} UUID value(s) via SQL")
 
@@ -1584,7 +1720,10 @@ def choose_uuids_from_panel() -> List[str]:
         start_marzban_log_watcher()
 
     # Make sure UUID watcher is active (if not started yet)
-    start_uuid_watcher(interval_seconds=5)
+    # Use config interval instead of hard-coded 5
+    config = load_config()
+    interval = config.get("uuid_refresh_interval", 5)
+    start_background_uuid_watcher()
 
     print(f"{BLUE}Reading UUIDs from database...{NC}")
     uuids = extract_uuids_from_sqlite(db_path)
@@ -1629,8 +1768,15 @@ def list_setups() -> None:
 
     found_any = False
     for ns in namespaces:
-        # verify still exists
-        if run_cmd(f"ip netns list | grep -q '^{ns} '", capture_output=False).returncode != 0:
+        # verify still exists - ip netns list returns "ns-xxx (id: N)" format
+        # So we check if any line starts with the namespace name
+        ns_check = run_cmd("ip netns list 2>/dev/null", capture_output=True)
+        if ns_check.returncode != 0:
+            continue
+        # Check if namespace exists (handle "ns-xxx (id: N)" format)
+        ns_exists = any(line.strip().startswith(ns) for line in ns_check.stdout.splitlines())
+        if not ns_exists:
+            debug_log(f"list_setups: namespace {ns} not found in netns list")
             continue
 
         if ns == "nsxray":
@@ -1661,6 +1807,8 @@ def list_setups() -> None:
                 port = res_port.stdout.strip() or "Unknown"
 
         if not ns_ip:
+            # Debug: log why namespace was skipped
+            debug_log(f"list_setups: skipping {ns} - no IP found")
             continue
 
         found_any = True
@@ -2280,6 +2428,16 @@ def create_setup() -> None:
 
     # --- configure Xray using current DB and start it for this one namespace ---
     refresh_uuids_for_all_namespaces(interactive=True)
+    
+    # Ensure UUID watcher is running in background after setup
+    config = load_config()
+    if config.get("panel_type") and config.get("panel_db_path"):
+        print(f"\n{BLUE}Ensuring UUID auto-refresh watcher is running...{NC}")
+        if start_background_uuid_watcher():
+            interval = config.get("uuid_refresh_interval", 5)
+            print(f"{GREEN}✓ UUID Auto-Refresh Watcher is active (every {interval} seconds){NC}")
+        else:
+            print(f"{YELLOW}⚠ UUID watcher not started, but setup is complete{NC}")
 
     input("Press Enter to continue...")
 
@@ -2973,11 +3131,18 @@ def main() -> None:
     # PANEL_DB_PATH is configured via `choose_uuids_from_panel`.
     # This watcher reads UUIDs from panel every interval_seconds seconds and restarts Xray
     # so new users can also connect.
-    interval = config.get("uuid_refresh_interval", 5)
-    start_uuid_watcher(interval_seconds=interval)
-    print(f"{GREEN}✓ UUID Auto-Refresh Watcher started (every {interval} seconds){NC}")
-    print(f"{BLUE}  UUIDs will be automatically updated from panel every {interval} seconds{NC}")
-    print(f"{BLUE}  New users will be able to connect automatically{NC}\n")
+    if config.get("panel_type") and config.get("panel_db_path"):
+        interval = config.get("uuid_refresh_interval", 5)
+        if start_background_uuid_watcher():
+            print(f"{GREEN}✓ UUID Auto-Refresh Watcher started (every {interval} seconds){NC}")
+            print(f"{BLUE}  UUIDs will be automatically updated from panel every {interval} seconds{NC}")
+            print(f"{BLUE}  New users will be able to connect automatically{NC}\n")
+        else:
+            print(f"{YELLOW}⚠ UUID watcher could not be started automatically{NC}")
+            print(f"{YELLOW}  You can configure it from the menu{NC}\n")
+    else:
+        print(f"{YELLOW}⚠ UUID watcher not started: panel not configured{NC}")
+        print(f"{YELLOW}  Configure panel in Xray management (option 2) to enable auto-refresh{NC}\n")
 
     while True:
         show_header()
@@ -3034,25 +3199,34 @@ if __name__ == "__main__":
         
         # Start UUID watcher if panel is configured
         if config.get("panel_type") and config.get("panel_db_path"):
-            interval = config.get("uuid_refresh_interval", 5)
-            start_uuid_watcher(interval_seconds=interval)
-            debug_log(f"restore: started UUID watcher with interval {interval}s")
+            if start_background_uuid_watcher():
+                interval = config.get("uuid_refresh_interval", 5)
+                debug_log(f"restore: started UUID watcher with interval {interval}s")
+            else:
+                debug_log("restore: failed to start UUID watcher")
         
         # Exit silently (systemd will log output to journal)
         sys.exit(0)
     elif len(sys.argv) > 1 and sys.argv[1] == "--start-watcher":
-        # Start watcher in background and exit
-        import subprocess
-        script_path = os.path.abspath(__file__)
-        subprocess.Popen(
-            [sys.executable, script_path, "--auto-refresh"],
-            stdout=open("/tmp/watcher.log", "w"),
-            stderr=subprocess.STDOUT,
-            start_new_session=True
-        )
-        print("UUID Watcher started in background")
-        print("To stop: pkill -f 'auto_refresh_main'")
-        print("Logs: tail -f /tmp/setup-wg-watch.log")
+        # Start watcher using systemd service (preferred) or as background process
+        require_root()
+        if ensure_uuid_watcher_service():
+            print("UUID Watcher started via systemd service")
+            print("To check status: systemctl status setup-wg-uuid-watcher")
+            print("To stop: systemctl stop setup-wg-uuid-watcher")
+            print("Logs: tail -f /tmp/setup-wg-watch.log")
+        else:
+            # Fallback: start as background process
+            script_path = os.path.abspath(__file__)
+            subprocess.Popen(
+                [sys.executable, script_path, "--auto-refresh"],
+                stdout=open("/tmp/watcher.log", "w"),
+                stderr=subprocess.STDOUT,
+                start_new_session=True
+            )
+            print("UUID Watcher started in background (fallback mode)")
+            print("To stop: pkill -f 'auto_refresh_main'")
+            print("Logs: tail -f /tmp/setup-wg-watch.log")
     else:
         main()
 
